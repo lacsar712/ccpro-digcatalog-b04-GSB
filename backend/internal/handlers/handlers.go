@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -169,6 +170,17 @@ func (h *Handler) GetUnit(c *gin.Context) {
 	c.JSON(http.StatusOK, unit)
 }
 
+// normalizeDepth 以米为单位校验并规整探方深度：缺省补 0，深度不得为负，且下限不大于上限。
+func normalizeDepth(min, max float64) (float64, float64, error) {
+	if min < 0 || max < 0 {
+		return 0, 0, errors.New("深度不能为负数")
+	}
+	if min > max {
+		return 0, 0, errors.New("深度下限不能大于上限")
+	}
+	return min, max, nil
+}
+
 func (h *Handler) CreateUnit(c *gin.Context) {
 	var unit models.Unit
 	if err := c.ShouldBindJSON(&unit); err != nil {
@@ -184,6 +196,12 @@ func (h *Handler) CreateUnit(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "所属工地不存在"})
 		return
 	}
+	min, max, err := normalizeDepth(unit.DepthMin, unit.DepthMax)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	unit.DepthMin, unit.DepthMax = min, max
 	if err := h.DB.Create(&unit).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -206,8 +224,13 @@ func (h *Handler) UpdateUnit(c *gin.Context) {
 	}
 	unit.SiteID = req.SiteID
 	unit.Code = req.Code
-	unit.DepthMin = req.DepthMin
-	unit.DepthMax = req.DepthMax
+	min, max, err := normalizeDepth(req.DepthMin, req.DepthMax)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	unit.DepthMin = min
+	unit.DepthMax = max
 	unit.StratumDesc = req.StratumDesc
 	if err := h.DB.Save(&unit).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
