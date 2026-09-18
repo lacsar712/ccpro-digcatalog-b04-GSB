@@ -169,6 +169,12 @@ func (h *Handler) GetUnit(c *gin.Context) {
 	c.JSON(http.StatusOK, unit)
 }
 
+// validDepth 约束深度区间：自地表向下以米计，不允许负值，且下限不大于上限。
+// float64 在 JSON 缺省时为零值，即缺省补 0。
+func validDepth(min, max float64) bool {
+	return min >= 0 && max >= 0 && min <= max
+}
+
 func (h *Handler) CreateUnit(c *gin.Context) {
 	var unit models.Unit
 	if err := c.ShouldBindJSON(&unit); err != nil {
@@ -177,6 +183,10 @@ func (h *Handler) CreateUnit(c *gin.Context) {
 	}
 	if unit.SiteID == 0 || unit.Code == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "所属工地和编号必填"})
+		return
+	}
+	if !validDepth(unit.DepthMin, unit.DepthMax) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "深度区间无效：需满足 0 ≤ 深度下限 ≤ 深度上限（米）"})
 		return
 	}
 	var site models.Site
@@ -202,6 +212,10 @@ func (h *Handler) UpdateUnit(c *gin.Context) {
 	var req models.Unit
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数无效"})
+		return
+	}
+	if !validDepth(req.DepthMin, req.DepthMax) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "深度区间无效：需满足 0 ≤ 深度下限 ≤ 深度上限（米）"})
 		return
 	}
 	unit.SiteID = req.SiteID
